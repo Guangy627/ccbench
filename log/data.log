@@ -1,0 +1,12 @@
+🚀 正在加载 CC-Bench-trajectories 数据集...
+📊 数据总量：370 条
+可用字段： ['id', 'task_id', 'trajectory', 'model_name', 'task_category', 'user_messages', 'assistant_messages', 'total_input_tokens', 'total_output_tokens', 'total_tokens', 'tool_calls', 'tool_failures', 'failure_rate']
+✅ 已筛选任务类别 'data_analysis'，剩余 25 条
+✅ 已筛选模型 ['DeepSeek-V3.1-Terminus', 'Claude-Sonnet-4']，剩余 10 条
+💾 已保存到 ccbench_data_analysis_deepseek_claude.csv
+
+模型样本分布:
+model_name
+Claude-Sonnet-4           5
+DeepSeek-V3.1-Terminus    5
+Name: task_id, dtype: int64

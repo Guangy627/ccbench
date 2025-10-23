@@ -1,0 +1,25 @@
+## ✅ 筛选后的数据已保存
+
+**筛选后的2000年及以后歌曲数据文件：** `spotify_songs_2000_and_later.csv`
+
+**文件详情：**
+- **数据量**：28,076首歌曲
+- **年份范围**：2000 - 2020（整数年份）
+- **文件大小**：约6.9MB
+- **包含列**：24列，包括新增的`release_year`列
+
+**数据特征：**
+- 年份分布：从2000年的250首到2019年的9,081首，呈现明显增长趋势
+- 包含所有原始特征：歌曲信息、音频特征、播放列表信息等
+- 新增了`release_year`列，便于按年份分析
+
+**所有生成的文件：**
+1. `spotify_songs_2000_and_later.csv` - 筛选后的2000年及以后歌曲数据
+2. `report.html` - 完整的分析报告
+3. `yearly_trend.png` - 年度发布趋势图
+4. `top_songs_activity.png` - 活跃度得分图表
+5. `genre_danceability.png` - 音乐类型danceability比较图
+6. `tempo_distribution.png` - Tempo分布直方图
+7. `spotify_analysis.py` - 分析脚本
+
+现在您可以直接使用`spotify_songs_2000_and_later.csv`文件进行进一步的分析，或者查看`report.html`获取完整的分析结果。
