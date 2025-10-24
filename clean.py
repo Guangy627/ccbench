@@ -27,6 +27,7 @@ ASSISTANT_TYPES = {
 }
 TOOL_TYPES = {"bash","tool","tool_use","tool_call","tool_result","run","exec","command","shell"}
 
+
 # 提取文本时优先尝试的键
 TEXT_KEYS_PRIMARY = ["text", "content", "message", "summary", "thought", "analysis"]
 TEXT_KEYS_TOOL    = ["stdout", "stderr", "output", "result", "details", "preview"]
