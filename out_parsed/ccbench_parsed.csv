@@ -1,4 +1,4 @@
-﻿id,task_id,model_name,task_category,user_messages,assistant_messages,total_input_tokens,total_output_tokens,total_tokens,tool_calls_dataset,tool_failures_dataset,failure_rate_dataset,conv_time_sec,active_time_sec,avg_turn_time,active_ratio,tool_calls_events,tool_fail_events,tool_success_rate_events,G,S,B,SDS,TCR,SCR,RD,assistant_text_len,final_excerpt
+﻿id,task_id,model_name,task_category,user_messages,assistant_messages,total_input_tokens,total_output_tokens,total_tokens,tool_calls_dataset,tool_failures_dataset,failure_rate_dataset,conv_time_sec,active_time_sec,avg_turn_time,active_ratio,tool_calls_events,tool_fail_events,tool_success_rate_events,G_goal,S_plan,B_verify,SDS,TCR,SCR,RD,assistant_text_len,final_excerpt
 236,40,DeepSeek-V3.1-Terminus,data_analysis,1,36,105707,583,106290,19,3,15.8,977.078,804.32,22.342,0.823,0,0,1.0,0.3,0.001,0.031,0.166,0.458,0.035,0.0,35072,"## 任务完成总结
 
 我已经成功完成了所有要求的泰坦尼克号数据分析任务：

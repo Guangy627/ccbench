@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+ #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 import json
@@ -32,6 +32,15 @@ TOOL_TYPES = {"bash","tool","tool_use","tool_call","tool_result","run","exec","c
 TEXT_KEYS_PRIMARY = ["text", "content", "message", "summary", "thought", "analysis"]
 TEXT_KEYS_TOOL    = ["stdout", "stderr", "output", "result", "details", "preview"]
 
+REF_MODEL = "Claude-Sonnet-4"
+W_SDS = 0.35
+W_SCR = 0.35
+W_E   = 0.20
+W_TCR = 0.10  # 从 ΔM 中减去
+
+TAU_POS = 0.02   # Good 阈值：ΔM > TAU_POS
+TAU_NEG = -0.02  # Bad 阈值：ΔM < TAU_NEG
+TAU_SAME = 0.02  # Same 区间：|ΔM| ≤ TAU_SAME
 # ============ 工具函数 ============
 
 def parse_ts(ts: Any) -> Optional[datetime]:
@@ -342,7 +351,111 @@ def debug_unique_roles_types(df: pd.DataFrame, n: int = 5):
     print("unique roles:", roles)
     print("unique types:", types)
 
-# ============ 主流程 ============
+# >>> 新增：E_score（与你报告里的一致）
+def e_score(SDS: float, TCR: float, SCR: float, RD: float) -> float:
+    """
+    Emergent reasoning score:
+    E = (SDS * (SCR + RD)) / (1 + TCR)
+    """
+    try:
+        return float((SDS * (SCR + RD)) / (1.0 + max(TCR, 0.0)))
+    except Exception:
+        return 0.0
+
+# >>> 新增：计算 ΔM
+def compute_delta_m(row_a: pd.Series, row_b: pd.Series) -> float:
+    """
+    以 row_a 相对 row_b 的差异为 ΔM：
+    ΔM = w1*(SDS_a - SDS_b) + w2*(SCR_a - SCR_b) + w3*(E_a - E_b) - w4*(TCR_a - TCR_b)
+    """
+    SDS_a, SDS_b = row_a.get("SDS", 0.0), row_b.get("SDS", 0.0)
+    SCR_a, SCR_b = row_a.get("SCR", 0.0), row_b.get("SCR", 0.0)
+    TCR_a, TCR_b = row_a.get("TCR", 1.0), row_b.get("TCR", 1.0)
+    RD_a,  RD_b  = row_a.get("RD", 0.0),  row_b.get("RD", 0.0)
+
+    E_a = e_score(SDS_a, TCR_a, SCR_a, RD_a)
+    E_b = e_score(SDS_b, TCR_b, SCR_b, RD_b)
+
+    delta = (W_SDS * (SDS_a - SDS_b)
+             + W_SCR * (SCR_a - SCR_b)
+             + W_E   * (E_a   - E_b)
+             - W_TCR * (TCR_a - TCR_b))
+    return float(delta)
+
+# >>> 新增：对齐两模型并打 G/S/B 标签
+def assign_gsb_labels(parsed_df: pd.DataFrame,
+                      model_a: str,
+                      model_b: str,
+                      ref_model: str = REF_MODEL) -> pd.DataFrame:
+    """
+    对每个 task_id 内，找出两个模型各一条记录，计算 ΔM，并给双方都打标签：
+      - 若 ref_model == model_b，则 ΔM 表示 model_a - model_b
+      - Good  : ΔM > TAU_POS
+        Same  : |ΔM| ≤ TAU_SAME
+        Bad   : ΔM < TAU_NEG
+    返回：在原 df 基础上增加 'E_score', 'delta_M', 'GSB' 列
+    """
+    df = parsed_df.copy()
+
+    # 先算每行的 E_score
+    df["E_score"] = df.apply(lambda r: e_score(r.get("SDS", 0.0),
+                                              r.get("TCR", 1.0),
+                                              r.get("SCR", 0.0),
+                                              r.get("RD", 0.0)), axis=1)
+
+    df["delta_M"] = pd.NA
+    df["GSB"] = pd.NA
+
+    # 仅对同一个 task_id 的 (model_a, model_b) 成对比较
+    for tid, g in df.groupby("task_id"):
+        ga = g[g["model_name"] == model_a]
+        gb = g[g["model_name"] == model_b]
+        if ga.empty or gb.empty:
+            continue
+        # 取各自第一条（或可按需要做更严格的选择）
+        ra = ga.iloc[0]
+        rb = gb.iloc[0]
+
+        # 统一：ΔM 计算“模型A相对模型B”
+        delta = compute_delta_m(ra, rb)
+
+        # 给两个模型各自打标签；标签含义是“相对参照模型（ref_model）”
+        if ref_model == model_b:
+            # ΔM = A - B，故 A 的优劣即由 ΔM 决定；B 取相反
+            gsb_a = ("Good" if delta > TAU_POS else
+                     "Bad"  if delta < TAU_NEG else "Same")
+            gsb_b = ("Bad"  if delta > TAU_POS else
+                     "Good" if delta < TAU_NEG else "Same")
+            df.loc[ra.name, "delta_M"] = round(delta, 6)
+            df.loc[rb.name, "delta_M"] = round(-delta, 6)
+            df.loc[ra.name, "GSB"] = gsb_a
+            df.loc[rb.name, "GSB"] = gsb_b
+        else:
+            # 若你的参照不是 model_b，可按需要调整逻辑；此处保持“相对 ref_model”定义
+            # 这里给出一个对称处理：谁是参照，就计算“本行 - 参照”的 ΔM
+            if ra["model_name"] == ref_model:
+                delta_a = compute_delta_m(ra, rb)  # ref - other
+                gsb_a = ("Good" if delta_a > TAU_POS else
+                         "Bad"  if delta_a < TAU_NEG else "Same")
+                gsb_b = ("Bad"  if delta_a > TAU_POS else
+                         "Good" if delta_a < TAU_NEG else "Same")
+                df.loc[ra.name, "delta_M"] = round(delta_a, 6)
+                df.loc[rb.name, "delta_M"] = round(-delta_a, 6)
+                df.loc[ra.name, "GSB"] = gsb_a
+                df.loc[rb.name, "GSB"] = gsb_b
+            else:
+                delta_b = compute_delta_m(rb, ra)  # ref - other
+                gsb_b = ("Good" if delta_b > TAU_POS else
+                         "Bad"  if delta_b < TAU_NEG else "Same")
+                gsb_a = ("Bad"  if delta_b > TAU_POS else
+                         "Good" if delta_b < TAU_NEG else "Same")
+                df.loc[rb.name, "delta_M"] = round(delta_b, 6)
+                df.loc[ra.name, "delta_M"] = round(-delta_b, 6)
+                df.loc[rb.name, "GSB"] = gsb_b
+                df.loc[ra.name, "GSB"] = gsb_a
+
+    return df
+
 
 def main():
     parser = argparse.ArgumentParser(description="Parse CC-Bench trajectories and compute GSB/SDS/TCR/Reflexivity + tool/time stats.")
@@ -375,17 +488,21 @@ def main():
             TCR = tcr_semantic_compression(atext)
             SCR = density_ratio(atext, FIX_WORDS + "|" + VERIFY_WORDS)
             RD  = density_ratio(atext, REFLECT_WORDS)
+            # first_chunk = atext.split("\n\n")[0] if atext else ""
+            # G   = min(1.0, 0.3 + 0.7 * density_ratio(first_chunk, PLAN_WORDS))
+            # S   = density_ratio(atext, PLAN_WORDS)
+            # B   = max(density_ratio(atext, VERIFY_WORDS), density_ratio(atext, FIX_WORDS))
             first_chunk = atext.split("\n\n")[0] if atext else ""
-            G   = min(1.0, 0.3 + 0.7 * density_ratio(first_chunk, PLAN_WORDS))
-            S   = density_ratio(atext, PLAN_WORDS)
-            B   = max(density_ratio(atext, VERIFY_WORDS), density_ratio(atext, FIX_WORDS))
+            G_goal   = min(1.0, 0.3 + 0.7 * density_ratio(first_chunk, PLAN_WORDS))
+            S_plan   = density_ratio(atext, PLAN_WORDS)
+            B_verify = max(density_ratio(atext, VERIFY_WORDS), density_ratio(atext, FIX_WORDS))
 
             row_dict = {
                 "id": row.get("id"),
                 "task_id": row.get("task_id"),
                 "model_name": row.get("model_name"),
                 "task_category": row.get("task_category"),
-                #tool
+                # tool
                 "user_messages": row.get("user_messages"),
                 "assistant_messages": row.get("assistant_messages"),
                 "total_input_tokens": row.get("total_input_tokens"),
@@ -394,16 +511,20 @@ def main():
                 "tool_calls_dataset": row.get("tool_calls"),
                 "tool_failures_dataset": row.get("tool_failures"),
                 "failure_rate_dataset": row.get("failure_rate"),
-                #event 
+                # event 
                 "conv_time_sec": round(dur_s, 3) if pd.notna(dur_s) else None,
                 "active_time_sec": active_stats["active_time_sec"],
                 "avg_turn_time": active_stats["avg_turn_time"],
                 "active_ratio": active_stats["active_ratio"],
                 **tool_ev,
-                #metrics
-                "G": round(G, 3), "S": round(S, 3), "B": round(B, 3),
-                "SDS": round(SDS, 3), "TCR": round(TCR, 3),
-                "SCR": round(SCR, 3), "RD": round(RD, 3),
+                # metrics（行为）
+                "G_goal": round(G_goal, 3),
+                "S_plan": round(S_plan, 3),
+                "B_verify": round(B_verify, 3),
+                "SDS": round(SDS, 3),
+                "TCR": round(TCR, 3),
+                "SCR": round(SCR, 3),
+                "RD": round(RD, 3),
                 "assistant_text_len": len(atext),
                 "final_excerpt": afinal[:400]
             }
@@ -415,10 +536,11 @@ def main():
                 S_w   = density_ratio_weighted(events, PLAN_WORDS)
                 B_w   = max(density_ratio_weighted(events, VERIFY_WORDS),
                             density_ratio_weighted(events, FIX_WORDS))
+                # >>> 替换/改名：与非加权保持一致的命名
                 row_dict.update({
-                    "G_w": round(G, 3),  
-                    "S_w": round(S_w, 3),
-                    "B_w": round(B_w, 3),
+                    "G_goal_w": round(G_goal, 3),  # 仍沿用非加权 G_goal 的定义（如果需要也可做早期阶段加权）
+                    "S_plan_w": round(S_w, 3),
+                    "B_verify_w": round(B_w, 3),
                     "SDS_w": round(SDS_w, 3),
                     "SCR_w": round(SCR_w, 3),
                     "RD_w": round(RD_w, 3),
@@ -435,32 +557,22 @@ def main():
                 "error": str(e)
             })
 
-    parsed_df = pd.DataFrame(parsed_rows)
+        parsed_df = pd.DataFrame(parsed_rows)
 
-    # —— 输出文件名根据 weighted 与否自动切换 ——
+    # —— 先写一版“行为指标”文件 ——（保留你现有逻辑）
     out_csv = out_dir / ("ccbench_parsed_weighted.csv" if args.weighted else "ccbench_parsed.csv")
     parsed_df.to_csv(out_csv, index=False, encoding="utf-8-sig")
 
-
-    # 自动挑一个两模型同时存在的 task_id，并导出两模型的 assistant 全文与 final 片段
-    counts = parsed_df.groupby(["task_id", "model_name"]).size().unstack(fill_value=0)
-    if set(MODELS).issubset(set(counts.columns)):
-        both_ids = counts[(counts[MODELS[0]] > 0) & (counts[MODELS[1]] > 0)].index.tolist()
+    # —— 基于行为指标打 G/S/B 标签（Good/Same/Bad）——
+    # 与 MODELS 中的两模型配对，参照 REF_MODEL 进行相对评价
+    if len(MODELS) == 2:
+        labeled_df = assign_gsb_labels(parsed_df, model_a=MODELS[0], model_b=MODELS[1], ref_model=REF_MODEL)
+        # 带标签的结果文件
+        out_csv_gsb = out_dir / ("ccbench_parsed_with_gsb_weighted.csv" if args.weighted else "ccbench_parsed_with_gsb.csv")
+        labeled_df.to_csv(out_csv_gsb, index=False, encoding="utf-8-sig")
+        print(f"[DONE] 导出带 GSB 标签的指标表：{out_csv_gsb}")
     else:
-        both_ids = []
-    if both_ids:
-        # chosen_task = both_ids[0]
-        for chosen_task in both_ids:
-            print(f"[INFO] 选择 task_id = {chosen_task}（两模型均存在）")
-            for model in MODELS:
-                raw_row = df[(df["task_id"] == chosen_task) & (df["model_name"] == model)].iloc[0]
-                events = parse_trajectory(raw_row["trajectory"])
-                atext = concat_assistant_text(events)
-                afinal = final_assistant_text(events)
-                (out_dir / f"{chosen_task}_{model}_assistant_text.txt").write_text(atext)
-                (out_dir / f"{chosen_task}_{model}_final.txt").write_text(afinal)
-
-    print(f"[DONE] 导出指标表：{out_csv}")
+        print("[WARN] MODELS 不是两元素对（无法成对打 GSB 标签）；已仅导出行为指标表。")
     print(f"[DONE] 输出目录：{out_dir.resolve()}")
 
 if __name__ == "__main__":
