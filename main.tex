@@ -1,0 +1,462 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx, booktabs, amsmath, amssymb, amsthm, hyperref, caption, longtable}
+\usepackage{harvard}
+\usepackage{tabularx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{siunitx}
+\usepackage{makecell}
+\usepackage{graphicx}
+\graphicspath{{figs/}{./}{/mnt/data\_analysista/}}
+\sisetup{detect-weight=true,detect-family=true}
+\citationstyle{dcu}
+\renewcommand{\harvardurl}[1]{\texttt{#1}}
+
+\title{CC-Bench Trajectory Analysis: Metric Definitions, Scoring Framework, and Model-wise Evaluation}
+\author{}
+
+
+\newtheorem{definition}{Definition}
+\newcommand{\density}{\mathrm{density}}
+\newcommand{\densityw}{\mathrm{density}_{w}}
+\newcommand{\sentset}{S}
+\newcommand{\plan}{\Pi_{\text{plan}}}
+\newcommand{\verify}{\Pi_{\text{verify}}}
+\newcommand{\fix}{\Pi_{\text{fix}}}
+
+\begin{document}
+\maketitle
+\section{Overview}
+We address the CC-Bench prompt directly: select representative tasks, compare two models on
+their behavioral and reasoning trajectories, and justify each score through observed interaction
+patterns. Specifically, we evaluate \textbf{Claude-Sonnet-4} and \textbf{DeepSeek-V3.1-Terminus}
+on five data-analysis trajectories (IDs~40–44), reporting three behavioral indicators—
+\textit{Goal}, \textit{Strategy}, and \textit{Bugfix}—alongside auxiliary metrics
+(SDS, TCR, SCR, RD) and two composite measures: the \textit{E~score} and
+\textit{$\Delta M$ index}. Each captures a distinct reasoning dimension:
+goal framing, structural planning, and verification or correction. 
+Weighted variants (Goal$_w$, Strategy$_w$, Bugfix$_w$, RD$_w$) apply
+\textbf{time-scale weighting} to highlight sustained and late-phase reasoning.
+
+The composite $\Delta M$ index integrates structural (SDS), verification (SCR), coherence (E),
+and brevity (TCR) differences between models. For data-analysis tasks, verification-related
+components (SDS and SCR) receive higher weights (0.35 each), coherence (E) a moderate weight (0.20),
+and brevity (TCR) a smaller penalty (0.10), reflecting reliability and diagnostic stability
+over linguistic compression. Each task pair is then labeled as \textbf{Good}, \textbf{Same}, or
+\textbf{Bad} based on $\Delta M$, forming the GSB–w classification.
+
+In addition, three \textbf{visualization indicators}—Goal Priming (G), Strategy Density (S),
+and Bug/Verification Density (B)—facilitate intuitive inspection of model behavior.
+These qualitative indicators are excluded from scoring but illustrate goal setting,
+planning density, and verification strength for human interpretation and reporting.
+
+Overall, reliability dominates communicative efficiency in these data-analysis trajectories.
+Claude acts as a concise planner with higher goal clarity and compression (TCR),
+while DeepSeek functions as a reflective verifier, maintaining denser verification
+(Bugfix$_w$, SCR$_w$) and stronger late-phase reflection (RD$_w$).
+Representative cases such as Task~44 show DeepSeek’s sustained self-checking yielding higher
+E~score and a positive $\Delta M$ under reliability-oriented weighting.
+All quantitative values are reported in Tables~1–3; metric derivations appear in Appendix~A.
+
+
+\section{Results and Analysis}
+\subsection{Quantitative Results}
+Tables~\ref{tab:da-behavior} and~\ref{tab:da-efficiency} summarize the quantitative metrics across five representative \texttt{da} trajectories for two models.
+Table~\ref{tab:da-behavior} reports the behavioral indicators (G, S, B, SDS, TCR, SCR, RD),
+while Table~\ref{tab:da-efficiency} extends the view with efficiency and outcome indicators
+(\textit{assistant\_text\_len}, \textit{E\_score}, \textit{delta\_M}, and the final \textit{GSB} verdict).
+Together, they form the empirical basis for model-wise comparison and interaction-level analysis.
+
+\vspace{6pt}
+
+% --------- Table 2A ----------
+\begin{table}[htbp]
+\renewcommand{\arraystretch}{1.18}
+\setlength{\tabcolsep}{5pt}
+\centering
+\small
+\begin{tabularx}{\textwidth}{
+  >{\raggedright\arraybackslash}p{0.8cm}
+  >{\raggedright\arraybackslash}p{3.0cm}
+  >{\raggedright\arraybackslash}p{1.0cm}
+  *{7}{>{\centering\arraybackslash}X}
+}
+\toprule
+\textbf{ID} & \textbf{Model} & \textbf{Task} &
+\textbf{Goal} & \textbf{Strategy} & \textbf{Bugfix} & \textbf{SDS} & \textbf{TCR} & \textbf{SCR} & \textbf{RD} \\
+\midrule
+40 & DeepSeek{-}V3.1{-}Terminus & da & 0.300 & 0.001 & 0.031 & 0.166 & 0.458 & 0.035 & 0.000 \\
+40 & Claude{-}Sonnet{-}4        & da & 0.300 & 0.000 & 0.009 & 0.110 & 0.644 & 0.015 & 0.000 \\
+41 & DeepSeek{-}V3.1{-}Terminus & da & 0.300 & 0.000 & 0.075 & 0.101 & 0.421 & 0.076 & 0.002 \\
+41 & Claude{-}Sonnet{-}4        & da & 0.300 & 0.000 & 0.038 & 0.067 & 0.678 & 0.038 & 0.000 \\
+42 & DeepSeek{-}V3.1{-}Terminus & da & 0.300 & 0.000 & 0.027 & 0.104 & 0.595 & 0.033 & 0.000 \\
+42 & Claude{-}Sonnet{-}4        & da & 0.300 & 0.000 & 0.067 & 0.138 & 0.613 & 0.069 & 0.000 \\
+43 & DeepSeek{-}V3.1{-}Terminus & da & 0.300 & 0.000 & 0.020 & 0.063 & 0.337 & 0.020 & 0.000 \\
+43 & Claude{-}Sonnet{-}4        & da & 0.300 & 0.001 & 0.059 & 0.086 & 0.586 & 0.059 & 0.000 \\
+44 & DeepSeek{-}V3.1{-}Terminus & da & 0.300 & 0.000 & 0.081 & 0.150 & 0.544 & 0.087 & 0.000 \\
+44 & Claude{-}Sonnet{-}4        & da & 0.347 & 0.005 & 0.038 & 0.114 & 0.661 & 0.042 & 0.000 \\
+\bottomrule
+\end{tabularx}
+\vspace{4pt}
+\caption{Table 2A: Behavioral metrics for five \texttt{da} trajectories. Abbreviations: G (Goal Priming), S (Strategy Density), B (Bug/Verification Density), SDS (Strategic Density Score), TCR (Textual Compression Ratio), SCR (Sanity/Correction Ratio), RD (Reflective Density).}
+\label{tab:da-behavior}
+\end{table}
+
+\vspace{6pt}
+% --------- Table 2B ----------
+\begin{table}[htbp]
+\renewcommand{\arraystretch}{1.18}
+\setlength{\tabcolsep}{5pt}
+\centering
+\small
+\begin{tabularx}{\textwidth}{
+  >{\raggedright\arraybackslash}p{0.8cm}
+  >{\raggedright\arraybackslash}p{3.0cm}
+  >{\raggedright\arraybackslash}p{1.0cm}
+  *{3}{>{\centering\arraybackslash}X}
+  >{\raggedright\arraybackslash}p{0.9cm}
+}
+\toprule
+\textbf{ID} & \textbf{Model} & \textbf{Task} &
+\textbf{Len} & \textbf{E} & $\boldsymbol{\Delta M}$ & \textbf{GSB} \\
+\midrule
+40 & DeepSeek{-}V3.1{-}Terminus & da & 35072 & 0.0039849 & +0.045796 & Good \\
+40 & Claude{-}Sonnet{-}4        & da & 19406 & 0.0010036 & -0.045796 & Bad  \\
+41 & DeepSeek{-}V3.1{-}Terminus & da & 20752 & 0.0055440 & +0.051705 & Good \\
+41 & Claude{-}Sonnet{-}4        & da & 15700 & 0.0015173 & -0.051705 & Bad  \\
+42 & DeepSeek{-}V3.1{-}Terminus & da & 21360 & 0.0021517 & -0.023450 & Bad  \\
+42 & Claude{-}Sonnet{-}4        & da & 22085 & 0.0059033 & +0.023450 & Good \\
+43 & DeepSeek{-}V3.1{-}Terminus & da & 20592 & 0.0009424 & +0.002749 & Same \\
+43 & Claude{-}Sonnet{-}4        & da & 16291 & 0.0031992 & -0.002749 & Same \\
+44 & DeepSeek{-}V3.1{-}Terminus & da & 27933 & 0.0084521 & +0.041164 & Good \\
+44 & Claude{-}Sonnet{-}4        & da & 14901 & 0.0028826 & -0.041164 & Bad  \\
+\bottomrule
+\end{tabularx}
+\vspace{4pt}
+\caption{Table 2B: Efficiency and verdict indicators. Abbreviations: Len (assistant\_text\_len), E (E\_score), $\Delta M$ (delta\_M).}
+\label{tab:da-efficiency}
+\end{table}
+
+\subsection{Model-wise Behavioral Comparison}
+Using Tables~\ref{tab:da-behavior} and~\ref{tab:da-efficiency}, we observe complementary reasoning tendencies across tasks 40--44:
+\begin{itemize}
+  \item \textbf{Overall verdict (GSB):} DeepSeek wins 3 tasks (40, 41, 44), Claude leads on one (42), and task 43 is tied — giving a \textbf{3--1--1} advantage to DeepSeek.
+  \item \textbf{Verification and reflexivity:} DeepSeek’s advantage stems from higher $B$ and $SCR$ in most cases (e.g., 0.075/0.081 and 0.076/0.087), correlating with positive $\Delta M$ and stronger $E$-scores.
+  \item \textbf{Claude’s Task 42 exception:} Claude outperforms with higher $B{=}0.067$ and $SCR{=}0.069$ and achieves the best $E{=}0.0059$, reflecting transient verification efficiency.
+  \item \textbf{Compression vs.\ density trade-off:} Claude maintains higher \emph{TCR}, showing compact articulation, while DeepSeek achieves higher verification density—longer but more diagnostic reasoning.
+  \item \textbf{Goal priming:} Both stay near $G\!\approx\!0.30$; Claude’s spike to 0.347 (Task 44) suggests sharper goal setup but insufficient follow-through in verification.
+\end{itemize}
+In sum, \textbf{Claude} functions as a \emph{concise planner}, whereas \textbf{DeepSeek} acts as a \emph{reflective verifier}. 
+These dual archetypes underscore a balance between communicative economy and procedural depth, with DeepSeek favored in reliability-oriented settings.
+
+\subsection{Interaction-Level Notes}
+The efficiency metrics in Table~\ref{tab:da-efficiency} clarify trade-offs between brevity and stability.
+DeepSeek produces longer assistant outputs (e.g., tasks 40, 44) yet converts that budget into higher $SCR$ and $E$.
+Claude’s shorter turns (high TCR) deliver compactness but less verification gain, explaining its lower average $\Delta M$ and mixed GSB results.
+
+\subsection{Visualization}
+Figures~\ref{fig:combined-vis} and~\ref{fig:emergence-trend} visualize the updated, \textbf{weighted} behavioral and reasoning dynamics across the five \texttt{da} tasks.
+
+The GSB chart (top of Figure~\ref{fig:combined-vis}) shows that both models maintain similar early goal clarity ($G{\approx}0.30$),
+but \textbf{DeepSeek consistently exhibits higher verification density ($B$)} and a slightly more stable strategic pattern ($S$).
+In contrast, \textbf{Claude displays a sharper goal-priming peak} at task~44 ($G{=}0.347$),
+yet this early planning advantage is offset by weaker verification behavior, resulting in lower overall robustness.
+
+The auxiliary metrics (bottom of Figure~\ref{fig:combined-vis}) highlight a clearer trade-off once time-weighted variants are considered.
+\textbf{Claude maintains higher textual compression ($TCR$)} across all tasks—indicating concise articulation and tighter phrasing—
+whereas \textbf{DeepSeek achieves higher weighted strategic density ($SDS_{w}$)} and verification ratio ($SCR_{w}$),
+signaling more persistent reasoning and stronger self-correction throughout the dialogue trajectory.
+Although both models show near-zero unweighted reflective density ($RD{\approx}0$),
+the \textbf{time-weighted reflective density ($RD_{w}$)} slightly increases for DeepSeek,
+suggesting that its reflective or corrective statements tend to appear in later conversational phases.
+This temporal behavior aligns with DeepSeek’s higher $SCR_{w}$ and the delayed but stronger emergence peaks observed in Figure~\ref{fig:emergence-trend}.
+
+Figure~\ref{fig:emergence-trend} plots the \textbf{weighted emergent reasoning scores} ($E\_score$) across the same task set.
+A mild cross-over dynamic is observed: \textbf{Claude rises early at task~42} ($E{=}0.0055$),
+while \textbf{DeepSeek peaks later at task~44} ($E{=}0.0074$), maintaining higher values across most earlier tasks.
+This contrast reflects two complementary reasoning modes:
+Claude’s compact, early-emerging reasoning efficiency versus DeepSeek’s delayed yet more iterative emergence,
+driven by verification and late-phase reflection.
+Together, these visual patterns support the quantitative findings from Tables~\ref{tab:da-behavior} and~\ref{tab:emergent-reasoning},
+clarifying the balance between \emph{compression-oriented} and \emph{verification-oriented} reasoning architectures.
+
+
+Figure~\ref{fig:emergence-trend} visualizes the emergent reasoning scores ($E\_score$) across tasks.
+The updated curve reveals a \textbf{cross-over dynamic}: Claude peaks early at task~42 ($E{=}0.0059$), while DeepSeek climbs sharply to a higher peak at task~44 ($E{=}0.0085$).
+This pattern illustrates their complementary reasoning modes:
+Claude’s reasoning strength emerges through compactness and early planning,
+whereas DeepSeek’s emergence is delayed but more pronounced—driven by iterative verification and reflective correction.
+Together, these visual patterns corroborate the quantitative findings from Tables~\ref{tab:da-behavior} and~\ref{tab:da-efficiency},
+clarifying the trade-off between \emph{compression-oriented} and \emph{verification-oriented} reasoning architectures.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=.7\linewidth]{figs/gsb_by_model_unweighted.png}\\[1em]
+  \includegraphics[width=.7\linewidth]{figs/aux_by_model_unweighted.png}
+  \caption{Model-wise metric visualizations: (Top) GSB scores; (Bottom) auxiliary metrics (SDS/TCR/SCR/RD).}
+  \label{fig:combined-vis}
+\end{figure}
+
+\clearpage
+\section{Emergent Reasoning Capability Analysis}
+This section examines \textbf{emergent reasoning} by linking structural indicators (SDS, TCR, SCR, RD) with efficiency and robustness (E\_score, active\_ratio, failure\_rate).
+All data\_analysista are drawn from representative \texttt{data\_analysis} tasks (IDs 40--44).
+
+\subsection{Quantitative Summary}
+
+\begin{table}[htbp]
+\renewcommand{\arraystretch}{1.22}
+\centering
+\small
+\begin{tabularx}{\textwidth}{
+  >{\raggedright\arraybackslash}p{3.2cm}
+  >{\centering\arraybackslash}p{0.9cm}
+  S[table-format=1.3]
+  S[table-format=1.3]
+  S[table-format=1.3]
+  S[table-format=1.3]
+  S[table-format=1.5]
+  S[table-format=1.3]
+  S[table-format=2.2]
+  S[table-format=2.1]
+}
+\toprule
+\textbf{Model} & \textbf{Task} &
+\multicolumn{5}{c}{\textbf{Behavioral (Weighted Variants)}} &
+\multicolumn{3}{c}{\textbf{Efficiency / Robustness}}\\
+\cmidrule(lr){3-7}\cmidrule(lr){8-10}
+& &
+\multicolumn{1}{c}{\textbf{SDS$_w$}} &
+\multicolumn{1}{c}{\textbf{TCR}} &
+\multicolumn{1}{c}{\textbf{SCR$_w$}} &
+\multicolumn{1}{c}{\textbf{RD$_w$}} &
+\multicolumn{1}{c}{\textbf{E\_score}} &
+\multicolumn{1}{c}{\makecell{\textbf{active}\\\textbf{ratio}}} &
+\multicolumn{1}{c}{\makecell{\textbf{avg\_turn}\\\textbf{time (s)}}} &
+\multicolumn{1}{c}{\makecell{\textbf{failure}\\\textbf{rate (\%)}}} \\
+\midrule
+DeepSeek-V3.1-Terminus & 40 & 0.183 & 0.458 & 0.048 & 0.000 & 0.00602 & 0.823 & 22.34 & 15.8 \\
+Claude-Sonnet-4        & 40 & 0.089 & 0.644 & 0.012 & 0.000 & 0.00065 & 0.763 & 68.01 &  7.1 \\
+DeepSeek-V3.1-Terminus & 41 & 0.100 & 0.421 & 0.085 & 0.007 & 0.00647 & 0.794 & 15.79 &  8.3 \\
+Claude-Sonnet-4        & 41 & 0.081 & 0.678 & 0.061 & 0.000 & 0.00294 & 0.340 & 11.67 & 18.8 \\
+DeepSeek-V3.1-Terminus & 42 & 0.077 & 0.595 & 0.038 & 0.000 & 0.00183 & 0.774 & 15.39 & 19.2 \\
+Claude-Sonnet-4        & 42 & 0.139 & 0.613 & 0.064 & 0.000 & 0.00552 & 0.490 & 25.85 & 24.1 \\
+DeepSeek-V3.1-Terminus & 43 & 0.097 & 0.337 & 0.039 & 0.000 & 0.00283 & 0.782 & 14.15 &  9.4 \\
+Claude-Sonnet-4        & 43 & 0.052 & 0.586 & 0.019 & 0.000 & 0.00062 & 0.676 & 40.27 & 12.9 \\
+DeepSeek-V3.1-Terminus & 44 & 0.145 & 0.544 & 0.079 & 0.000 & 0.00742 & 0.685 & 13.27 & 10.9 \\
+Claude-Sonnet-4        & 44 & 0.185 & 0.661 & 0.076 & 0.000 & 0.00846 & 0.322 &  9.05 & 22.2 \\
+\bottomrule
+\end{tabularx}
+\caption{Emergent reasoning indicators (weighted variants) and efficiency statistics across five \texttt{da} tasks (IDs 40–44). Weighted forms (SDS$_w$, SCR$_w$, RD$_w$) emphasize reasoning persistence and late-stage reflection.}
+\label{tab:emergent-reasoning}
+\end{table}
+
+
+\subsection{Comparative Analysis}
+Several cross-metric tendencies stand out:
+\begin{itemize}
+  \item \textbf{Weighted strategic density:} DeepSeek maintains higher $SDS_w$ in 40, 41, 44 (0.10–0.18), showing richer structured reasoning across longer trajectories.
+  \item \textbf{Verification and reflection:} DeepSeek’s $SCR_w$ rises to 0.048–0.085 and includes non-zero $RD_w$ at task 41 (0.007), whereas Claude’s reflective behavior remains near zero, confirming deeper self-checking in DeepSeek.
+  \item \textbf{Claude’s compact emergence:} Claude attains higher $TCR$ and an early $E\_score$ peak at 42 (0.0055), emphasizing compression-oriented efficiency.
+  \item \textbf{Temporal efficiency:} DeepSeek sustains higher active ratios (0.68–0.82) and shorter average turns (13–22 s), balancing reasoning depth and flow stability.
+  \item \textbf{Failure robustness:} Both remain comparable, with DeepSeek more consistent (8–19 \%) and Claude more volatile (7–24 \%).
+\end{itemize}
+
+
+\subsection{Interpretation}
+Overall, we observe a trade-off between \emph{compression-oriented reasoning} (Claude)
+and \emph{verification-oriented reasoning} (DeepSeek).
+DeepSeek’s higher SDS and SCR indicate stronger coherence over extended trajectories,
+hinting at early-stage \textbf{emergent meta-reasoning}.
+Claude, by contrast, favors textual compactness (high TCR) at the cost of iterative verification.
+These differences align with distinct \emph{reasoning archetypes}---\emph{linear planners} versus \emph{reflective validata\_analysistors}.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=.75\linewidth]{figs/emergence_trend.png}
+  \caption{Reasoning emergence by task.
+  Each point represents a data\_analysista-analysis task (IDs 40--44).
+  The \textbf{E\_score} quantifies emergent reasoning strength from structural and temporal features
+  (SDS, TCR, SCR, RD, and activity ratios).
+  DeepSeek-V3.1-Terminus exhibits more volatile but higher peaks (notably Task~44),
+  while Claude-Sonnet-4 shows steadier yet lower emergence across tasks.}
+  \label{fig:emergence-trend}
+\end{figure}
+
+\section{Interpretation and Discussion}
+Across the representative data\_analysista-analysis trajectories (Tasks 40--44), the two models reveal distinct reasoning styles under the GSB framework.
+\textbf{Claude-Sonnet-4} shows slightly higher G and stronger text compression, reflecting an early and concise articulation of objectives followed by direct, linear execution.
+Its responses are compact and plan-first, efficient in setting up intentions but less persistent in iterative reasoning.
+
+In contrast, \textbf{DeepSeek} demonstrates higher B and moderately stronger S across multiple tasks.
+This pattern aligns with its trajectory: DeepSeek typically begins with a clear goal ($G \approx 0.30$) and then engages in self-checking and correctional steps --- using phrases like ``check'', ``verify'', or ``fix'' --- showing a reflective, verification-oriented process.
+The higher B (0.075--0.081 vs.\ 0.038--0.059) captures this behavior quantitatively.
+
+\textbf{Evaluation logic.} Within GSB, G reflects goal clarity, S reflects structured reasoning, and B captures self-monitoring and correction.
+Since these tasks emphasize reliability in data\_analysista analysis, B carries greater interpretive weight.
+Although Claude excels in brevity and clarity of initial planning, DeepSeek’s repeated self-verification and reflective adjustments contribute more to reasoning stability.
+
+\textbf{Overall interpretation.} The two models embody complementary cognitive styles:
+\begin{itemize}
+  \item \textbf{Claude-Sonnet-4 $\rightarrow$ Concise Planner:} favors linear, efficient execution with minimal redundata\_analysisncy.
+  \item \textbf{DeepSeek $\rightarrow$ Reflective Verifier:} adopts an iterative validata\_analysistion loop, maintaining steadier reasoning over longer trajectories.
+\end{itemize}
+
+In scenarios requiring procedural correctness and diagnostic depth, \textbf{DeepSeek achieves a higher overall GSB score}, whereas \textbf{Claude} emphasizes communicative economy.
+This contrast highlights a broader trade-off between \emph{compression-oriented} and \emph{verification-oriented} reasoning that we see in many modern assistants.
+
+
+
+\clearpage
+\appendix
+\section{Metric Framework and Interpretive Logic}
+\label{appendix:metric-framework}
+
+This appendix presents the metric definitions and the interpretive logic used throughout the paper.
+It formalizes how each behavioral indicator (G, S, B, SDS, TCR, SCR, RD) is computed and how these
+metrics map to cognitive and reasoning behaviors.
+
+\subsection{Core Lexicons}
+We define three regex lexicons that capture planning, verification, and debugging intents:
+\begin{align*}
+\plan&:\ \texttt{plan|step|strategy|outline|pipeline|procedure|first|then|next|we will} \\
+\verify&:\ \texttt{check|verify|test|assert|unit test|print|plot|compare|evaluate} \\
+\fix&:\ \texttt{fix|bug|error|patch|adjust|correct|refactor|resolve|rerun}
+\end{align*}
+
+\subsection{Core Metrics (GSB)}
+\begin{definition}[Goal Priming ($G$)]
+Measures whether the assistant initiates planning early:
+\[
+G = \min\!\bigl(1,\ 0.3 + 0.7 \cdot \density(\texttt{first\_chunk}, \plan)\bigr).
+\]
+\end{definition}
+
+\begin{definition}[Strategy Density ($S$)]
+\[
+S = \density(\texttt{assistant\_text}, \plan),
+\]
+representing sustained planning and structured reasoning.
+\end{definition}
+
+\begin{definition}[Bug/Verification Density ($B$)]
+\[
+B = \max\!\bigl(\density(\texttt{assistant\_text}, \verify),\ \density(\texttt{assistant\_text}, \fix)\bigr),
+\]
+capturing self-checking and debugging tendencies.
+\end{definition}
+
+\paragraph{Weighted variants.}
+Weighted forms $(G_w, S_w, B_w, RD_w)$ use $\densityw$, where time-scale weights
+emphasize behaviors occurring later in the assistant trajectory. This adjustment is especially relevant for reflective behaviors ($RD_w$), which tend to emerge in later phases.
+
+\subsection{Auxiliary Metrics}
+\begin{itemize}
+\item \textbf{SDS (Strategic Density Score):} Fraction of planning, verification, and fixing sentences within assistant outputs.
+\item \textbf{TCR (Textual Compression Ratio):} Ratio of unique to total sentences (higher means less redundancy and greater conciseness).
+\item \textbf{SCR (Sanity/Correction Ratio):} $\density(\texttt{assistant\_text}, \verify \cup \fix)$, measuring the frequency of validation or correction acts.
+\item \textbf{RD (Reflective Density):} Proportion of reflective cues (``wait'', ``rethink'', ``revisit'', ``oops''). A time-weighted variant $RD_w$ captures late-phase reflection.
+\end{itemize}
+
+\subsection{Cognitive and Behavioral Interpretation}
+Table~\ref{tab:metric-interpretation} summarizes how each metric family maps to reasoning abilities and observable behavior.
+
+\begin{table}[htbp]
+\renewcommand{\arraystretch}{1.3}
+\setlength{\extrarowheight}{2pt}
+\centering
+\scriptsize
+\begin{tabularx}{\textwidth}{
+  >{\raggedright\arraybackslash}p{2.2cm}
+  >{\raggedright\arraybackslash}p{3.2cm}
+  >{\raggedright\arraybackslash}p{3.2cm}
+  >{\raggedright\arraybackslash}X
+}
+\toprule
+\textbf{Metric / Group} & \textbf{Cognitive Capability Captured} & \textbf{Observable Behavioral Pattern} & \textbf{Interpretive Logic} \\
+\midrule
+\textbf{GSB} (Goal--Strategy--Bug) &
+Macro-level task understanding, planning, and execution &
+Linear vs.\ cyclic trajectories &
+Indicates whether the model maintains goal alignment and structured completion over time. \\
+\addlinespace[2pt]
+\textbf{Trajectory Archetype} &
+Reasoning architecture prototype &
+\emph{Linear Planner} / \emph{Iterative Validator} / \emph{Reactive Fixer} &
+Contrasts direct plan–execute with iterative self-correction styles. \\
+\addlinespace[2pt]
+\textbf{Emergent Reflexivity (SCR, RD)} &
+Self-monitoring and corrective reflex &
+Frequency of ``wait'', ``check'', ``verify''-type utterances &
+Signals meta-reasoning and self-diagnostic awareness. \\
+\addlinespace[2pt]
+\textbf{SDS} (Strategic Density Score) &
+Density of key reasoning steps &
+Effective reasoning tokens / total reasoning tokens &
+Measures reasoning compactness and signal-to-noise ratio. \\
+\addlinespace[2pt]
+\textbf{TCR} (Trajectory Compression Ratio) &
+Compressibility of reasoning path &
+Accuracy retained after textual compression &
+Evaluates redundancy vs.\ conciseness in the trajectory. \\
+\bottomrule
+\end{tabularx}
+\caption{Mapping between behavioral metrics, cognitive capabilities, and interpretive logic. Weighted variants ($SDS_w$, $SCR_w$, $RD_w$) emphasize persistence and late-phase reflection.}
+\label{tab:metric-interpretation}
+\end{table}
+
+\subsection{Model-wise Comparison and $\Delta M$ Index}
+
+To compare two models under the same task, we define the composite performance
+difference $\Delta M$ as a weighted sum of metric deltas:
+
+\[
+\Delta M =
+0.35(\mathrm{SDS}_A - \mathrm{SDS}_B)
++ 0.35(\mathrm{SCR}_A - \mathrm{SCR}_B)
++ 0.20(E_A - E_B)
+- 0.10(\mathrm{TCR}_A - \mathrm{TCR}_B).
+\]
+
+Here, SDS and SCR represent structured and verification densities,
+$E$ is the emergent reasoning score,
+and TCR (compression ratio) is subtracted to penalize overly terse responses.
+The weight configuration $(0.35, 0.35, 0.20, 0.10)$
+was chosen empirically to balance structural integrity (SDS, SCR)
+and overall reasoning coherence (E)
+while keeping linguistic brevity (TCR) as a secondary factor.
+
+We classify model-level outcomes as:
+\[
+\text{Good: } \Delta M > 0.02, \quad
+\text{Same: } |\Delta M| \le 0.02, \quad
+\text{Bad: } \Delta M < -0.02.
+\]
+
+\section{Data Preprocessing and Sentence-Level Framework}
+\label{appendix:data-preprocessing}
+
+Raw conversation trajectories are stored as JSON arrays of events (\texttt{role}, \texttt{type}, timestamps, nested \texttt{message}).
+We standardize roles (\texttt{assistant}, \texttt{user}, \texttt{system}); timestamps are used to compute total duration and assistant-active time.
+
+\subsection{Sentence Extraction}
+Let $\sentset(x)$ denote all sentences in text $x$. For a regex set $\Pi$:
+\[
+\density(x,\Pi) = \frac{\bigl|\{\,s\in\sentset(x): s \text{ matches } \Pi\,\}\bigr|}{|\sentset(x)|}, 
+\qquad
+\density(x,\Pi)=0 \text{ if } |\sentset(x)|=0.
+\]
+
+\subsection{Time Weighting}
+Given assistant events $i$ with time-scale weight $w_i$, we define the time-weighted density:
+\[
+\densityw = \frac{\sum_i w_i \cdot \text{hits}_i}{\sum_i w_i \cdot \text{sentences}_i}.
+\]
+These preprocessing steps produce the normalized sentence-level corpora
+(\texttt{ccbench\_parsed.csv} and \texttt{ccbench\_parsed\_weighted.csv}) used in all subsequent analyses.
+
+\bibliographystyle{dcu}
+% \bibliography{refs}
+
+\end{document}
